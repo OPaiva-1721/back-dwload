@@ -43,6 +43,16 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader()
               .AllowCredentials()));
 
+builder.Services.AddHealthChecks()
+    .AddNpgSql(
+        builder.Configuration.GetConnectionString("DefaultConnection")
+            ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured."),
+        name: "postgres",
+        tags: ["db", "ready"])
+    .AddHangfire(opts => opts.MinimumAvailableServers = 1,
+        name: "hangfire",
+        tags: ["queue", "ready"]);
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -54,6 +64,12 @@ using (var scope = app.Services.CreateScope())
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseCors("AllowFrontend");
 app.UseRateLimiter();
+
+app.MapHealthChecks("/health");
+app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready")
+});
 
 if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("EnableSwagger"))
 {
