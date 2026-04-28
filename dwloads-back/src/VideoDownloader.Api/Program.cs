@@ -1,6 +1,7 @@
 using System.Threading.RateLimiting;
 using Hangfire;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 using Serilog;
 using VideoDownloader.Api.Endpoints;
 using VideoDownloader.Api.Middleware;
