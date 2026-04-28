@@ -9,6 +9,7 @@ using VideoDownloader.Application.Common.Interfaces;
 using VideoDownloader.Domain.Enums;
 using VideoDownloader.Domain.Errors;
 using VideoDownloader.Domain.ValueObjects;
+using VideoDownloader.Infrastructure.Queue;
 
 namespace VideoDownloader.Infrastructure.YtDlp;
 
