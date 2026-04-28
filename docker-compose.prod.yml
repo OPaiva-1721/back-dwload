@@ -1,18 +1,37 @@
 services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dwload
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: dwload
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dwload"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   api:
     build:
       context: ./dwloads-back
     ports:
       - "5089:5089"
+    depends_on:
+      db:
+        condition: service_healthy
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:5089
-      # Substitua pelos valores reais após provisionar a VM
-      - Storage__BaseUrl=http://SEU_IP_ORACLE:5089
-      - Cors__AllowedOrigins__0=https://SEU_PROJETO.vercel.app
+      - Storage__BaseUrl=${STORAGE_BASE_URL}
+      - Cors__AllowedOrigins__0=${CORS_ALLOWED_ORIGIN}
+      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=dwload;Username=dwload;Password=${POSTGRES_PASSWORD}
     volumes:
       - downloads:/app/downloads
     restart: unless-stopped
 
 volumes:
   downloads:
+  pgdata:
