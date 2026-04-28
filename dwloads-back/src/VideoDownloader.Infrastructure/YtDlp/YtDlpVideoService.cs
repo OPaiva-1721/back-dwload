@@ -14,6 +14,7 @@ namespace VideoDownloader.Infrastructure.YtDlp;
 
 public sealed partial class YtDlpVideoService(
     IOptions<YtDlpOptions> options,
+    YtDlpConcurrencyLimiter limiter,
     ILogger<YtDlpVideoService> logger)
     : IVideoMetadataService, IVideoDownloadService
 {
@@ -61,37 +62,45 @@ public sealed partial class YtDlpVideoService(
         Guid jobId, VideoUrl url, DownloadFormat format, string quality,
         IProgress<int> progress, CancellationToken ct)
     {
-        var outputTemplate = Path.Combine(Path.GetTempPath(), $"{jobId}.%(ext)s");
-        string[] args = [
-            ..BaseArgs(),
-            "--no-playlist",
-            "--write-info-json",
-            ..(format == DownloadFormat.Mp3
-                ? BuildAudioArgs(quality, outputTemplate, url.Value)
-                : BuildVideoArgs(quality, outputTemplate, url.Value))
-        ];
-
+        await limiter.WaitAsync(ct);
         try
         {
-            await RunWithProgressAsync(args, progress, ct);
+            var outputTemplate = Path.Combine(Path.GetTempPath(), $"{jobId}.%(ext)s");
+            string[] args = [
+                ..BaseArgs(),
+                "--no-playlist",
+                "--write-info-json",
+                ..(format == DownloadFormat.Mp3
+                    ? BuildAudioArgs(quality, outputTemplate, url.Value)
+                    : BuildVideoArgs(quality, outputTemplate, url.Value))
+            ];
 
-            // Exclude .info.json from the result — find the actual media file
-            var finalPath = Directory
-                .GetFiles(Path.GetTempPath(), $"{jobId}.*")
-                .FirstOrDefault(f => !f.EndsWith(".info.json", StringComparison.OrdinalIgnoreCase));
+            try
+            {
+                await RunWithProgressAsync(args, progress, ct);
 
-            return finalPath is null
-                ? Result<string>.Failure(new Error("YtDlp.OutputNotFound", "Download output file not found."))
-                : Result<string>.Success(finalPath);
+                // Exclude .info.json from the result — find the actual media file
+                var finalPath = Directory
+                    .GetFiles(Path.GetTempPath(), $"{jobId}.*")
+                    .FirstOrDefault(f => !f.EndsWith(".info.json", StringComparison.OrdinalIgnoreCase));
+
+                return finalPath is null
+                    ? Result<string>.Failure(new Error("YtDlp.OutputNotFound", "Download output file not found."))
+                    : Result<string>.Success(finalPath);
+            }
+            catch (OperationCanceledException)
+            {
+                return Result<string>.Failure(new Error("YtDlp.Cancelled", "Download was cancelled."));
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Download failed for job {JobId}", jobId);
+                return Result<string>.Failure(new Error("YtDlp.DownloadFailed", ex.Message));
+            }
         }
-        catch (OperationCanceledException)
+        finally
         {
-            return Result<string>.Failure(new Error("YtDlp.Cancelled", "Download was cancelled."));
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Download failed for job {JobId}", jobId);
-            return Result<string>.Failure(new Error("YtDlp.DownloadFailed", ex.Message));
+            limiter.Release();
         }
     }
 
