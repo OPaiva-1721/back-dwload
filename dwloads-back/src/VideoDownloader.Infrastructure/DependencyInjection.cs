@@ -33,7 +33,8 @@ public static class DependencyInjection
 
         services.AddHangfire(cfg =>
             cfg.UsePostgreSqlStorage(o =>
-                o.UseNpgsqlConnection(config.GetConnectionString("DefaultConnection"))));
+                o.UseNpgsqlConnection(config.GetConnectionString("DefaultConnection")
+                    ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured."))));
         services.AddHangfireServer(opts => opts.WorkerCount = 2);
 
         return services;
