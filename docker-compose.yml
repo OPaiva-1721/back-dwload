@@ -1,0 +1,15 @@
+services:
+  api:
+    build:
+      context: ./dwloads-back
+    ports:
+      - "5089:5089"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5089
+    volumes:
+      - downloads:/app/downloads
+      - ./dwloads-back/cookies.txt:/app/cookies.txt
+
+volumes:
+  downloads:

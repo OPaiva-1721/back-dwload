@@ -1,0 +1,36 @@
+# .NET
+**/bin/
+**/obj/
+**/*.user
+**/.vs/
+**/launchSettings.json
+
+# Node
+node_modules/
+dist/
+.pnpm-debug.log
+
+# Environment
+.env.prod
+.env.local
+*.env.local
+
+# EF Core Migrations tool
+*.db
+*.db-shm
+*.db-wal
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Downloads (runtime)
+dwloads-back/downloads/
+dwloads-back/src/VideoDownloader.Api/downloads/
+
+# Cookies (sensitive)
+cookies.txt

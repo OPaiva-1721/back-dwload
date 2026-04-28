@@ -1,0 +1,77 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "dwloads-back", "dwloads-back", "{7A6AC0AA-225C-732C-BDA2-D591CE81064B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{39C645B3-7FB0-5022-A8AE-76160332CE54}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoDownloader.Api", "dwloads-back\src\VideoDownloader.Api\VideoDownloader.Api.csproj", "{456547DD-FFF6-923E-C216-270B60AB68DC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoDownloader.Application", "dwloads-back\src\VideoDownloader.Application\VideoDownloader.Application.csproj", "{372BE1EC-800E-680B-49EE-D2816DF67E11}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoDownloader.Domain", "dwloads-back\src\VideoDownloader.Domain\VideoDownloader.Domain.csproj", "{4F496F6E-2688-E790-3D96-EC38E7B79433}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoDownloader.Infrastructure", "dwloads-back\src\VideoDownloader.Infrastructure\VideoDownloader.Infrastructure.csproj", "{0C95C99E-B23D-7593-3112-39085F8565E7}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{B4442C6F-BFA8-C021-FEED-4CFAD46B9122}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoDownloader.Application.Tests", "dwloads-back\tests\VideoDownloader.Application.Tests\VideoDownloader.Application.Tests.csproj", "{6FC5DEC5-8E9B-0B75-D1CA-C7C86C66213D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoDownloader.Domain.Tests", "dwloads-back\tests\VideoDownloader.Domain.Tests\VideoDownloader.Domain.Tests.csproj", "{06EE9700-F300-0148-7534-9CA082164805}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoDownloader.Infrastructure.Tests", "dwloads-back\tests\VideoDownloader.Infrastructure.Tests\VideoDownloader.Infrastructure.Tests.csproj", "{149F1BCC-7ED1-3D1A-94B7-ED9AA95D724C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{456547DD-FFF6-923E-C216-270B60AB68DC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{456547DD-FFF6-923E-C216-270B60AB68DC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{456547DD-FFF6-923E-C216-270B60AB68DC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{456547DD-FFF6-923E-C216-270B60AB68DC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{372BE1EC-800E-680B-49EE-D2816DF67E11}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{372BE1EC-800E-680B-49EE-D2816DF67E11}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{372BE1EC-800E-680B-49EE-D2816DF67E11}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{372BE1EC-800E-680B-49EE-D2816DF67E11}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4F496F6E-2688-E790-3D96-EC38E7B79433}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4F496F6E-2688-E790-3D96-EC38E7B79433}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4F496F6E-2688-E790-3D96-EC38E7B79433}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4F496F6E-2688-E790-3D96-EC38E7B79433}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0C95C99E-B23D-7593-3112-39085F8565E7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0C95C99E-B23D-7593-3112-39085F8565E7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0C95C99E-B23D-7593-3112-39085F8565E7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0C95C99E-B23D-7593-3112-39085F8565E7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6FC5DEC5-8E9B-0B75-D1CA-C7C86C66213D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6FC5DEC5-8E9B-0B75-D1CA-C7C86C66213D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6FC5DEC5-8E9B-0B75-D1CA-C7C86C66213D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6FC5DEC5-8E9B-0B75-D1CA-C7C86C66213D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{06EE9700-F300-0148-7534-9CA082164805}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{06EE9700-F300-0148-7534-9CA082164805}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{06EE9700-F300-0148-7534-9CA082164805}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{06EE9700-F300-0148-7534-9CA082164805}.Release|Any CPU.Build.0 = Release|Any CPU
+		{149F1BCC-7ED1-3D1A-94B7-ED9AA95D724C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{149F1BCC-7ED1-3D1A-94B7-ED9AA95D724C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{149F1BCC-7ED1-3D1A-94B7-ED9AA95D724C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{149F1BCC-7ED1-3D1A-94B7-ED9AA95D724C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{39C645B3-7FB0-5022-A8AE-76160332CE54} = {7A6AC0AA-225C-732C-BDA2-D591CE81064B}
+		{456547DD-FFF6-923E-C216-270B60AB68DC} = {39C645B3-7FB0-5022-A8AE-76160332CE54}
+		{372BE1EC-800E-680B-49EE-D2816DF67E11} = {39C645B3-7FB0-5022-A8AE-76160332CE54}
+		{4F496F6E-2688-E790-3D96-EC38E7B79433} = {39C645B3-7FB0-5022-A8AE-76160332CE54}
+		{0C95C99E-B23D-7593-3112-39085F8565E7} = {39C645B3-7FB0-5022-A8AE-76160332CE54}
+		{B4442C6F-BFA8-C021-FEED-4CFAD46B9122} = {7A6AC0AA-225C-732C-BDA2-D591CE81064B}
+		{6FC5DEC5-8E9B-0B75-D1CA-C7C86C66213D} = {B4442C6F-BFA8-C021-FEED-4CFAD46B9122}
+		{06EE9700-F300-0148-7534-9CA082164805} = {B4442C6F-BFA8-C021-FEED-4CFAD46B9122}
+		{149F1BCC-7ED1-3D1A-94B7-ED9AA95D724C} = {B4442C6F-BFA8-C021-FEED-4CFAD46B9122}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {DA3E6F92-4EC5-4AF2-A2D4-4E0E7714FB8A}
+	EndGlobalSection
+EndGlobal

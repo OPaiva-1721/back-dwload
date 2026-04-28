@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/VideoDownloader.Api/VideoDownloader.Api.csproj" />
+    <Project Path="src/VideoDownloader.Application/VideoDownloader.Application.csproj" />
+    <Project Path="src/VideoDownloader.Domain/VideoDownloader.Domain.csproj" />
+    <Project Path="src/VideoDownloader.Infrastructure/VideoDownloader.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/VideoDownloader.Domain.Tests/VideoDownloader.Domain.Tests.csproj" />
+    <Project Path="tests/VideoDownloader.Application.Tests/VideoDownloader.Application.Tests.csproj" />
+    <Project Path="tests/VideoDownloader.Infrastructure.Tests/VideoDownloader.Infrastructure.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,18 @@
+services:
+  api:
+    build:
+      context: ./dwloads-back
+    ports:
+      - "5089:5089"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5089
+      # Substitua pelos valores reais após provisionar a VM
+      - Storage__BaseUrl=http://SEU_IP_ORACLE:5089
+      - Cors__AllowedOrigins__0=https://SEU_PROJETO.vercel.app
+    volumes:
+      - downloads:/app/downloads
+    restart: unless-stopped
+
+volumes:
+  downloads:
