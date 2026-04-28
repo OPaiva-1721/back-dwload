@@ -6,6 +6,7 @@ using VideoDownloader.Api.Endpoints;
 using VideoDownloader.Api.Middleware;
 using VideoDownloader.Application;
 using VideoDownloader.Infrastructure;
+using VideoDownloader.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -43,6 +44,12 @@ builder.Services.AddCors(options =>
               .AllowCredentials()));
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.MigrateAsync();
+}
 
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseCors("AllowFrontend");

@@ -1,9 +1,11 @@
 using Hangfire;
 using Hangfire.PostgreSql;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using VideoDownloader.Application.Common.Interfaces;
 using VideoDownloader.Domain.Interfaces;
+using VideoDownloader.Infrastructure.Persistence;
 using VideoDownloader.Infrastructure.Queue;
 using VideoDownloader.Infrastructure.RealTime;
 using VideoDownloader.Infrastructure.Repositories;
@@ -20,7 +22,13 @@ public static class DependencyInjection
         services.Configure<YtDlpOptions>(config.GetSection("YtDlp"));
         services.Configure<StorageOptions>(config.GetSection("Storage"));
 
-        services.AddSingleton<IDownloadJobRepository, InMemoryDownloadJobRepository>();
+        var connectionString = config.GetConnectionString("DefaultConnection")
+            ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured.");
+
+        services.AddDbContext<AppDbContext>(opts =>
+            opts.UseNpgsql(connectionString));
+
+        services.AddScoped<IDownloadJobRepository, EfDownloadJobRepository>();
         services.AddScoped<IVideoMetadataService, YtDlpVideoService>();
         services.AddScoped<IVideoDownloadService, YtDlpVideoService>();
         services.AddScoped<IStorageService, LocalStorageService>();
@@ -33,8 +41,7 @@ public static class DependencyInjection
 
         services.AddHangfire(cfg =>
             cfg.UsePostgreSqlStorage(o =>
-                o.UseNpgsqlConnection(config.GetConnectionString("DefaultConnection")
-                    ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured."))));
+                o.UseNpgsqlConnection(connectionString)));
         services.AddHangfireServer(opts => opts.WorkerCount = 2);
 
         return services;
