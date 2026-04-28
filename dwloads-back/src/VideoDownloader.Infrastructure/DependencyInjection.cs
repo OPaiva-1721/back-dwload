@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using VideoDownloader.Application.Common.Interfaces;
 using VideoDownloader.Domain.Interfaces;
+using VideoDownloader.Infrastructure.Jobs;
 using VideoDownloader.Infrastructure.Persistence;
 using VideoDownloader.Infrastructure.Queue;
 using VideoDownloader.Infrastructure.RealTime;
@@ -44,6 +45,8 @@ public static class DependencyInjection
             cfg.UsePostgreSqlStorage(o =>
                 o.UseNpgsqlConnection(connectionString)));
         services.AddHangfireServer(opts => opts.WorkerCount = 2);
+
+        services.AddHostedService<StartupCleanupJob>();
 
         return services;
     }
