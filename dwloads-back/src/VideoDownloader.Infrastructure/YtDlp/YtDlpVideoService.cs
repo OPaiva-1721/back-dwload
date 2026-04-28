@@ -53,8 +53,9 @@ public sealed partial class YtDlpVideoService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to fetch metadata for {Url}", url.Value);
+            var detail = ex.Message.Length > 300 ? ex.Message[..300] : ex.Message;
             return Result<VideoMetadataResponse>.Failure(
-                new Error("YtDlp.MetadataFailed", "Could not retrieve video metadata."));
+                new Error("YtDlp.MetadataFailed", $"Could not retrieve video metadata. {detail}"));
         }
     }
 
@@ -170,6 +171,7 @@ public sealed partial class YtDlpVideoService(
     private async Task RunWithProgressAsync(string[] args, IProgress<int> progress, CancellationToken ct)
     {
         using var process = CreateProcess(args);
+        var stderrBuilder = new System.Text.StringBuilder();
 
         process.OutputDataReceived += (_, e) =>
         {
@@ -182,9 +184,15 @@ public sealed partial class YtDlpVideoService(
             }
         };
 
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data is not null)
+                stderrBuilder.AppendLine(e.Data);
+        };
+
         process.Start();
         process.BeginOutputReadLine();
-        process.BeginErrorReadLine(); // MUST consume stderr — pipe buffer deadlock otherwise
+        process.BeginErrorReadLine();
 
         try
         {
@@ -194,6 +202,15 @@ public sealed partial class YtDlpVideoService(
         {
             try { process.Kill(entireProcessTree: true); } catch { }
             throw;
+        }
+
+        if (process.ExitCode != 0)
+        {
+            var stderr = stderrBuilder.ToString().Trim();
+            throw new InvalidOperationException(
+                string.IsNullOrEmpty(stderr)
+                    ? $"yt-dlp exited with code {process.ExitCode}."
+                    : $"yt-dlp exited with code {process.ExitCode}. stderr: {stderr}");
         }
     }
 
