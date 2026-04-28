@@ -1,5 +1,5 @@
 using Hangfire;
-using Hangfire.InMemory;
+using Hangfire.PostgreSql;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using VideoDownloader.Application.Common.Interfaces;
@@ -31,7 +31,9 @@ public static class DependencyInjection
         services.AddScoped<DownloadJobProcessor>();
         services.AddScoped<FileCleanupJob>();
 
-        services.AddHangfire(cfg => cfg.UseInMemoryStorage());
+        services.AddHangfire(cfg =>
+            cfg.UsePostgreSqlStorage(o =>
+                o.UseNpgsqlConnection(config.GetConnectionString("DefaultConnection"))));
         services.AddHangfireServer(opts => opts.WorkerCount = 2);
 
         return services;
