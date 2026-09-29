@@ -1,5 +1,6 @@
 using System.Threading.RateLimiting;
 using Hangfire;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -26,12 +27,26 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 builder.Services.AddRateLimiter(opts =>
-    opts.AddFixedWindowLimiter("ip-limit", o =>
-    {
-        o.PermitLimit = 10;
-        o.Window = TimeSpan.FromMinutes(1);
-        o.QueueLimit = 5;
-    }));
+{
+    opts.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    opts.AddPolicy("ip-limit", ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+});
+
+// Behind a reverse proxy (Azure Container Apps, nginx) the real client IP arrives in X-Forwarded-For.
+builder.Services.Configure<ForwardedHeadersOptions>(o =>
+{
+    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    o.KnownNetworks.Clear();
+    o.KnownProxies.Clear();
+});
 
 var allowedOrigins = builder.Configuration
     .GetSection("Cors:AllowedOrigins")
@@ -62,6 +77,7 @@ using (var scope = app.Services.CreateScope())
     await db.Database.EnsureCreatedAsync();
 }
 
+app.UseForwardedHeaders();
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseCors("AllowFrontend");
 app.UseRateLimiter();

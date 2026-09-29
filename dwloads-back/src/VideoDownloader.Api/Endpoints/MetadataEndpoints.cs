@@ -25,6 +25,7 @@ public static class MetadataEndpoints
                 }));
         })
         .WithName("GetMetadata")
+        .RequireRateLimiting("ip-limit")
         .WithSummary("Fetch video metadata from URL")
         .Produces<VideoMetadataResponse>()
         .ProducesProblem(400)

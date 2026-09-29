@@ -27,6 +27,7 @@ services:
       - ASPNETCORE_URLS=http://+:5089
       - Storage__BaseUrl=${STORAGE_BASE_URL}
       - Cors__AllowedOrigins__0=${CORS_ALLOWED_ORIGIN}
+      - YTDLP_COOKIES=${YTDLP_COOKIES:-}
       - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=dwload;Username=dwload;Password=${POSTGRES_PASSWORD}
     volumes:
       - downloads:/app/downloads

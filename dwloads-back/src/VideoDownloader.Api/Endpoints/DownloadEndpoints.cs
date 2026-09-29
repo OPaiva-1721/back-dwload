@@ -31,6 +31,7 @@ public static class DownloadEndpoints
                 }));
         })
         .WithName("RequestDownload")
+        .RequireRateLimiting("ip-limit")
         .WithSummary("Queue a video download")
         .Produces<RequestDownloadResponse>(202)
         .ProducesProblem(400)
