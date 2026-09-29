@@ -97,6 +97,6 @@ public sealed class GetDownloadStatusHandlerTests
     private static DownloadJob MakeJob()
     {
         var url = VideoUrl.Create("https://youtube.com/watch?v=abc").Value!;
-        return DownloadJob.Create(url, DownloadFormat.Mp4);
+        return DownloadJob.Create(url, DownloadFormat.Mp4, "720p");
     }
 }

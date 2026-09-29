@@ -10,7 +10,7 @@ public sealed class DownloadJobTests
     private static DownloadJob CreateJob(DownloadFormat format = DownloadFormat.Mp4)
     {
         var url = VideoUrl.Create("https://youtube.com/watch?v=abc").Value!;
-        return DownloadJob.Create(url, format);
+        return DownloadJob.Create(url, format, "720p");
     }
 
     [Fact]

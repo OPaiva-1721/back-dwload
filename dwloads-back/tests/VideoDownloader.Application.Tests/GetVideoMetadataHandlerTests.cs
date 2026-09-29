@@ -35,7 +35,7 @@ public sealed class GetVideoMetadataHandlerTests
     [Theory]
     [InlineData("")]
     [InlineData("not-a-url")]
-    [InlineData("https://vimeo.com/123")]
+    [InlineData("https://example.com/123")]
     public async Task Handle_WithInvalidOrUnsupportedUrl_ReturnsFailureWithoutCallingService(string url)
     {
         var result = await _handler.Handle(new GetVideoMetadataQuery(url), CancellationToken.None);

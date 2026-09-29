@@ -26,7 +26,7 @@ public sealed class RequestDownloadHandlerTests
     [InlineData("https://twitter.com/user/status/123", "mp3")]
     public async Task Handle_WithValidRequest_EnqueuesJobAndReturnsSuccess(string url, string format)
     {
-        var command = new RequestDownloadCommand(url, format);
+        var command = new RequestDownloadCommand(url, format, "720p");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -43,7 +43,7 @@ public sealed class RequestDownloadHandlerTests
     [InlineData("   ")]
     public async Task Handle_WithEmptyUrl_ReturnsFailure(string url)
     {
-        var command = new RequestDownloadCommand(url, "mp4");
+        var command = new RequestDownloadCommand(url, "mp4", "720p");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -54,7 +54,7 @@ public sealed class RequestDownloadHandlerTests
     [Fact]
     public async Task Handle_WithInvalidUrl_ReturnsFailure()
     {
-        var command = new RequestDownloadCommand("not-a-url", "mp4");
+        var command = new RequestDownloadCommand("not-a-url", "mp4", "720p");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -65,7 +65,7 @@ public sealed class RequestDownloadHandlerTests
     [Fact]
     public async Task Handle_WithUnsupportedPlatform_ReturnsFailure()
     {
-        var command = new RequestDownloadCommand("https://vimeo.com/123", "mp4");
+        var command = new RequestDownloadCommand("https://example.com/123", "mp4", "720p");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -80,7 +80,7 @@ public sealed class RequestDownloadHandlerTests
     [InlineData("invalid")]
     public async Task Handle_WithInvalidFormat_ReturnsFailure(string format)
     {
-        var command = new RequestDownloadCommand("https://youtube.com/watch?v=abc", format);
+        var command = new RequestDownloadCommand("https://youtube.com/watch?v=abc", format, "720p");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -94,7 +94,7 @@ public sealed class RequestDownloadHandlerTests
         _repository.AddAsync(Arg.Any<Domain.Entities.DownloadJob>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromException(new Exception("DB error")));
 
-        var command = new RequestDownloadCommand("https://youtube.com/watch?v=abc", "mp4");
+        var command = new RequestDownloadCommand("https://youtube.com/watch?v=abc", "mp4", "720p");
 
         var act = async () => await _handler.Handle(command, CancellationToken.None);
 

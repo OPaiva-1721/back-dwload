@@ -63,6 +63,6 @@ public sealed class InMemoryDownloadJobRepositoryTests
     private static DownloadJob MakeJob()
     {
         var url = VideoUrl.Create("https://youtube.com/watch?v=test").Value!;
-        return DownloadJob.Create(url, DownloadFormat.Mp4);
+        return DownloadJob.Create(url, DownloadFormat.Mp4, "720p");
     }
 }

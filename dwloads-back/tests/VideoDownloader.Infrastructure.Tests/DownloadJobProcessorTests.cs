@@ -2,7 +2,9 @@ using FluentAssertions;
 using Hangfire;
 using Hangfire.InMemory;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
+using VideoDownloader.Application.Common.DTOs;
 using VideoDownloader.Application.Common.Interfaces;
 using VideoDownloader.Domain.Entities;
 using VideoDownloader.Domain.Enums;
@@ -10,6 +12,7 @@ using VideoDownloader.Domain.Errors;
 using VideoDownloader.Domain.Interfaces;
 using VideoDownloader.Domain.ValueObjects;
 using VideoDownloader.Infrastructure.Queue;
+using VideoDownloader.Infrastructure.Storage;
 
 namespace VideoDownloader.Infrastructure.Tests;
 
@@ -29,6 +32,7 @@ public sealed class DownloadJobProcessorTests
             _downloadService,
             _storage,
             _notifier,
+            Options.Create(new StorageOptions()),
             NullLogger<DownloadJobProcessor>.Instance);
     }
 
@@ -41,7 +45,7 @@ public sealed class DownloadJobProcessorTests
         await _processor.ProcessAsync(Guid.NewGuid(), CancellationToken.None);
 
         await _downloadService.DidNotReceive()
-            .DownloadAsync(Arg.Any<Guid>(), Arg.Any<VideoUrl>(), Arg.Any<DownloadFormat>(),
+            .DownloadAsync(Arg.Any<Guid>(), Arg.Any<VideoUrl>(), Arg.Any<DownloadFormat>(), Arg.Any<string>(),
                 Arg.Any<IProgress<int>>(), Arg.Any<CancellationToken>());
     }
 
@@ -52,7 +56,7 @@ public sealed class DownloadJobProcessorTests
         var error = new Error("YtDlp.DownloadFailed", "Connection reset");
         _repository.GetByIdAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
         _downloadService.DownloadAsync(
-                Arg.Any<Guid>(), Arg.Any<VideoUrl>(), Arg.Any<DownloadFormat>(),
+                Arg.Any<Guid>(), Arg.Any<VideoUrl>(), Arg.Any<DownloadFormat>(), Arg.Any<string>(),
                 Arg.Any<IProgress<int>>(), Arg.Any<CancellationToken>())
             .Returns(Result<string>.Failure(error));
 
@@ -82,19 +86,19 @@ public sealed class DownloadJobProcessorTests
 
             _repository.GetByIdAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
             _downloadService.DownloadAsync(
-                    Arg.Any<Guid>(), Arg.Any<VideoUrl>(), Arg.Any<DownloadFormat>(),
+                    Arg.Any<Guid>(), Arg.Any<VideoUrl>(), Arg.Any<DownloadFormat>(), Arg.Any<string>(),
                     Arg.Any<IProgress<int>>(), Arg.Any<CancellationToken>())
                 .Returns(Result<string>.Success(tempFile));
             _storage.SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
                 .Returns(storedPath);
-            _storage.GetDownloadUrl(storedPath).Returns(downloadUrl);
+            _storage.GetDownloadUrl(storedPath, Arg.Any<string>()).Returns(downloadUrl);
 
             await _processor.ProcessAsync(job.Id, CancellationToken.None);
 
             job.Status.Should().Be(DownloadStatus.Completed);
             job.OutputFilePath.Should().Be(storedPath);
 
-            await _notifier.Received(1).NotifyCompletedAsync(job.Id, downloadUrl, Arg.Any<CancellationToken>());
+            await _notifier.Received(1).NotifyCompletedAsync(job.Id, Arg.Is<DownloadCompletedPayload>(p => p.DownloadUrl == downloadUrl), Arg.Any<CancellationToken>());
         }
         finally
         {
@@ -105,6 +109,6 @@ public sealed class DownloadJobProcessorTests
     private static DownloadJob MakeJob()
     {
         var url = VideoUrl.Create("https://youtube.com/watch?v=test").Value!;
-        return DownloadJob.Create(url, DownloadFormat.Mp4);
+        return DownloadJob.Create(url, DownloadFormat.Mp4, "720p");
     }
 }

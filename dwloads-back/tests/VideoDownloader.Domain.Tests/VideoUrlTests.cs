@@ -31,8 +31,8 @@ public sealed class VideoUrlTests
     }
 
     [Theory]
-    [InlineData("https://vimeo.com/123456")]
-    [InlineData("https://dailymotion.com/video/abc")]
+    [InlineData("https://example.com/123456")]
+    [InlineData("https://facebook.com/video/abc")]
     public void Create_WithUnsupportedPlatform_ReturnsUnsupportedPlatformError(string raw)
     {
         var result = VideoUrl.Create(raw);
