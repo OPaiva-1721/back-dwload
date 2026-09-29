@@ -54,6 +54,8 @@ public sealed partial class YtDlpVideoService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to fetch metadata for {Url}", url.Value);
+            if (ClassifyFailure(ex.Message) is { } known)
+                return Result<VideoMetadataResponse>.Failure(known);
             var detail = ex.Message.Length > 300 ? ex.Message[..300] : ex.Message;
             return Result<VideoMetadataResponse>.Failure(
                 new Error("YtDlp.MetadataFailed", $"Could not retrieve video metadata. {detail}"));
@@ -97,13 +99,29 @@ public sealed partial class YtDlpVideoService(
             catch (Exception ex)
             {
                 logger.LogError(ex, "Download failed for job {JobId}", jobId);
-                return Result<string>.Failure(new Error("YtDlp.DownloadFailed", ex.Message));
+                return Result<string>.Failure(
+                    ClassifyFailure(ex.Message) ?? new Error("YtDlp.DownloadFailed", ex.Message));
             }
         }
         finally
         {
             limiter.Release();
         }
+    }
+
+    /// <summary>Maps well-known yt-dlp failures to actionable errors; null when unrecognised.</summary>
+    internal static Error? ClassifyFailure(string message)
+    {
+        if (message.Contains("Sign in to confirm", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("cookies are no longer valid", StringComparison.OrdinalIgnoreCase))
+            return new Error("YtDlp.AuthRequired",
+                "YouTube session expired or was flagged as a bot. Regenerate cookies.txt (tools/yt_cookies: login, then export).");
+
+        if (message.Contains("Requested format is not available", StringComparison.OrdinalIgnoreCase))
+            return new Error("YtDlp.FormatUnavailable",
+                "Requested format is not available. Check that deno/node and ffmpeg are installed and yt-dlp is up to date.");
+
+        return null;
     }
 
     private string[] BaseArgs() =>
