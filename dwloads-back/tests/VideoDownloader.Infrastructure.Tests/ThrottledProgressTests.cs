@@ -1,4 +1,5 @@
 using FluentAssertions;
+using VideoDownloader.Application.Common.DTOs;
 using VideoDownloader.Infrastructure.Queue;
 
 namespace VideoDownloader.Infrastructure.Tests;
@@ -14,42 +15,53 @@ public sealed class ThrottledProgressTests
     }
 
     private readonly ManualTime _time = new();
-    private readonly List<int> _emitted = [];
+    private readonly List<DownloadProgress> _emitted = [];
     private readonly ThrottledProgress _progress;
 
     public ThrottledProgressTests() =>
         _progress = new ThrottledProgress(_emitted.Add, TimeSpan.FromMilliseconds(300), _time);
 
+    private static DownloadProgress Dl(int pct) => new(DownloadStep.Downloading, pct);
+
     [Fact]
     public void Report_WithinInterval_DropsIntermediateValues()
     {
-        _progress.Report(1);
-        _progress.Report(2);
-        _progress.Report(3);
+        _progress.Report(Dl(1));
+        _progress.Report(Dl(2));
+        _progress.Report(Dl(3));
         _time.Advance(TimeSpan.FromMilliseconds(300));
-        _progress.Report(4);
+        _progress.Report(Dl(4));
 
-        _emitted.Should().Equal(1, 4);
+        _emitted.Select(p => p.Percent).Should().Equal(1, 4);
     }
 
     [Fact]
     public void Report_FinalValue_AlwaysEmittedEvenWithinInterval()
     {
-        _progress.Report(10);
-        _progress.Report(99);
+        _progress.Report(Dl(10));
+        _progress.Report(Dl(99));
 
-        _emitted.Should().Equal(10, 99);
+        _emitted.Select(p => p.Percent).Should().Equal(10, 99);
+    }
+
+    [Fact]
+    public void Report_StepChange_AlwaysEmittedEvenWithinInterval()
+    {
+        _progress.Report(Dl(99));
+        _progress.Report(new DownloadProgress(DownloadStep.Converting, 99));
+
+        _emitted.Select(p => p.Step).Should().Equal(DownloadStep.Downloading, DownloadStep.Converting);
     }
 
     [Fact]
     public void Report_NonIncreasingValues_AreIgnored()
     {
-        _progress.Report(50);
+        _progress.Report(Dl(50));
         _time.Advance(TimeSpan.FromSeconds(1));
-        _progress.Report(40);
-        _progress.Report(50);
+        _progress.Report(Dl(40));
+        _progress.Report(Dl(50));
 
-        _emitted.Should().Equal(50);
+        _emitted.Select(p => p.Percent).Should().Equal(50);
     }
 
     [Fact]
@@ -57,10 +69,10 @@ public sealed class ThrottledProgressTests
     {
         for (var i = 0; i < 5; i++)
         {
-            _progress.Report(i * 10);
+            _progress.Report(Dl(i * 10));
             _time.Advance(TimeSpan.FromSeconds(1));
         }
 
-        _emitted.Should().Equal(0, 10, 20, 30, 40);
+        _emitted.Select(p => p.Percent).Should().Equal(0, 10, 20, 30, 40);
     }
 }

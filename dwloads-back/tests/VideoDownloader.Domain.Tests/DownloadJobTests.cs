@@ -157,4 +157,27 @@ public sealed class DownloadJobTests
         job.CompletedAt.Should().NotBeNull();
         job.CompletedAt!.Value.Should().BeOnOrAfter(before);
     }
+
+    [Fact]
+    public void Cancel_QueuedJob_SetsCancelledAndCompletedAt()
+    {
+        var job = CreateJob();
+
+        job.Cancel();
+
+        job.Status.Should().Be(DownloadStatus.Cancelled);
+        job.IsFinished.Should().BeTrue();
+        job.CompletedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Cancel_FinishedJob_Throws()
+    {
+        var job = CreateJob();
+        job.Fail("boom");
+
+        var act = () => job.Cancel();
+
+        act.Should().Throw<InvalidOperationException>();
+    }
 }

@@ -26,7 +26,7 @@ public sealed class RequestDownloadHandlerTests
     [InlineData("https://twitter.com/user/status/123", "mp3")]
     public async Task Handle_WithValidRequest_EnqueuesJobAndReturnsSuccess(string url, string format)
     {
-        var command = new RequestDownloadCommand(url, format, "720p");
+        var command = new RequestDownloadCommand(url, format, format == "mp3" ? "192kbps" : "720p");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -100,5 +100,35 @@ public sealed class RequestDownloadHandlerTests
 
         await act.Should().ThrowAsync<Exception>().WithMessage("DB error");
         await _queue.DidNotReceive().EnqueueAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("mp4", "360p")]
+    [InlineData("mp4", "1440p")]
+    [InlineData("mp4", "144p")]
+    [InlineData("mp3", "192kbps")]
+    public async Task Handle_WithRealStreamQuality_Succeeds(string format, string quality)
+    {
+        var result = await _handler.Handle(
+            new RequestDownloadCommand("https://youtube.com/watch?v=abc", format, quality), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("mp4", "1080")]
+    [InlineData("mp4", "99p")]
+    [InlineData("mp4", "9000p")]
+    [InlineData("mp4", "192kbps")]
+    [InlineData("mp3", "1080p")]
+    [InlineData("mp3", "64kbps")]
+    public async Task Handle_WithInvalidQuality_ReturnsFailureWithoutEnqueueing(string format, string quality)
+    {
+        var result = await _handler.Handle(
+            new RequestDownloadCommand("https://youtube.com/watch?v=abc", format, quality), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Quality.Invalid");
+        await _queue.DidNotReceiveWithAnyArgs().EnqueueAsync(default, default);
     }
 }

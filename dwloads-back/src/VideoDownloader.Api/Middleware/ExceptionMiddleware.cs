@@ -22,9 +22,15 @@ public sealed class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionM
                 errors = ex.Errors.Select(e => new { e.PropertyName, e.ErrorMessage })
             });
         }
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+        {
+            // The client went away; there is nobody left to send an error to
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Unhandled exception");
+            // Streaming responses (SSE) may already be sending: the status can't change anymore
+            if (context.Response.HasStarted) return;
             context.Response.StatusCode = 500;
             context.Response.ContentType = "application/json";
             await context.Response.WriteAsJsonAsync(new ProblemDetails

@@ -3,8 +3,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using VideoDownloader.Api.Contracts;
 using VideoDownloader.Application.Common.DTOs;
+using VideoDownloader.Application.Downloads.Commands.CancelDownload;
 using VideoDownloader.Application.Downloads.Commands.RequestDownload;
 using VideoDownloader.Application.Downloads.Queries.GetDownloadStatus;
+using VideoDownloader.Domain.Errors;
 using VideoDownloader.Infrastructure.Storage;
 
 namespace VideoDownloader.Api.Endpoints;
@@ -56,6 +58,26 @@ public static class DownloadEndpoints
         .WithSummary("Get download job status")
         .Produces<DownloadJobStatusResponse>()
         .ProducesProblem(404)
+        .WithTags("Downloads");
+
+        app.MapDelete("/api/downloads/{jobId:guid}", async (
+            Guid jobId,
+            ISender sender,
+            CancellationToken ct) =>
+        {
+            var result = await sender.Send(new CancelDownloadCommand(jobId), ct);
+            return result.Match(
+                onSuccess: _ => Results.NoContent(),
+                onFailure: err => Results.Problem(
+                    title: err.Code,
+                    detail: err.Message,
+                    statusCode: err == DomainErrors.DownloadJob.NotFound ? 404 : 409));
+        })
+        .WithName("CancelDownload")
+        .WithSummary("Cancel a queued or running download")
+        .Produces(204)
+        .ProducesProblem(404)
+        .ProducesProblem(409)
         .WithTags("Downloads");
 
         app.MapGet("/files/{fileName}", (string fileName, [FromQuery] string? title, IOptions<StorageOptions> storageOptions) =>

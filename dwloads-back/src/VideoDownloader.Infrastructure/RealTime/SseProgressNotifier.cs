@@ -6,10 +6,11 @@ namespace VideoDownloader.Infrastructure.RealTime;
 
 public sealed class SseProgressNotifier(SseConnectionManager manager) : IProgressNotifier
 {
-    public async Task NotifyProgressAsync(Guid jobId, int percent, CancellationToken ct)
+    public async Task NotifyProgressAsync(Guid jobId, DownloadProgress progress, CancellationToken ct)
     {
         var channel = manager.GetOrCreate(jobId);
-        var data = JsonSerializer.Serialize(new { step = "fetching", percent });
+        var step = progress.Step == DownloadStep.Converting ? "converting" : "downloading";
+        var data = JsonSerializer.Serialize(new { step, percent = progress.Percent });
         await channel.Writer.WriteAsync(FormatEvent("progress", data), ct);
     }
 
@@ -24,6 +25,7 @@ public sealed class SseProgressNotifier(SseConnectionManager manager) : IProgres
             duration = payload.Duration,
             size = payload.Size,
             expiresAt = payload.ExpiresAt,
+            expiresAtUtc = payload.ExpiresAtUtc,
         });
         await channel.Writer.WriteAsync(FormatEvent("done", data), ct);
         manager.TryComplete(jobId);
@@ -34,6 +36,13 @@ public sealed class SseProgressNotifier(SseConnectionManager manager) : IProgres
         var channel = manager.GetOrCreate(jobId);
         var data = JsonSerializer.Serialize(new { message = reason });
         await channel.Writer.WriteAsync(FormatEvent("failed", data), ct);
+        manager.TryComplete(jobId);
+    }
+
+    public async Task NotifyCancelledAsync(Guid jobId, CancellationToken ct)
+    {
+        var channel = manager.GetOrCreate(jobId);
+        await channel.Writer.WriteAsync(FormatEvent("cancelled", "{}"), ct);
         manager.TryComplete(jobId);
     }
 

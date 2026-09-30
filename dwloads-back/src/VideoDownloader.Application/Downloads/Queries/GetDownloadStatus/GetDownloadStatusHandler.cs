@@ -32,6 +32,7 @@ public sealed class GetDownloadStatusHandler(
             job.Title,
             job.ThumbnailUrl,
             job.Duration,
-            job.FileSizeBytes));
+            job.FileSizeBytes,
+            job.CompletedAt));
     }
 }

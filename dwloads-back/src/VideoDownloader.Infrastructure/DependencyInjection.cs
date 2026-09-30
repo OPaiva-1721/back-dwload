@@ -37,6 +37,8 @@ public static class DependencyInjection
         services.AddScoped<IStorageService, LocalStorageService>();
         services.AddScoped<IDownloadQueue, HangfireDownloadQueue>();
         services.AddSingleton<SseConnectionManager>();
+        services.AddSingleton<JobCancellationRegistry>();
+        services.AddSingleton<IDownloadCanceller>(sp => sp.GetRequiredService<JobCancellationRegistry>());
         services.AddScoped<IProgressNotifier, SseProgressNotifier>();
 
         services.AddScoped<DownloadJobProcessor>();

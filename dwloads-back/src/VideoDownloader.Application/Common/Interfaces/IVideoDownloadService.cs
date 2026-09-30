@@ -1,3 +1,4 @@
+using VideoDownloader.Application.Common.DTOs;
 using VideoDownloader.Domain.Enums;
 using VideoDownloader.Domain.Errors;
 using VideoDownloader.Domain.ValueObjects;
@@ -11,6 +12,6 @@ public interface IVideoDownloadService
         VideoUrl url,
         DownloadFormat format,
         string quality,
-        IProgress<int> progress,
+        IProgress<DownloadProgress> progress,
         CancellationToken ct = default);
 }

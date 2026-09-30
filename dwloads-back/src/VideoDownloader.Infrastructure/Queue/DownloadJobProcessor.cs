@@ -14,6 +14,7 @@ public sealed class DownloadJobProcessor(
     IVideoDownloadService downloadService,
     IStorageService storage,
     IProgressNotifier notifier,
+    JobCancellationRegistry cancellations,
     IOptions<StorageOptions> storageOptions,
     ILogger<DownloadJobProcessor> logger)
 {
@@ -21,10 +22,20 @@ public sealed class DownloadJobProcessor(
 
     public async Task ProcessAsync(Guid jobId, CancellationToken ct)
     {
+        // Registered before the job is loaded, so a cancel request can't slip in between
+        using var registration = cancellations.Register(jobId, ct);
+
         var job = await repository.GetByIdAsync(jobId, ct);
         if (job is null)
         {
             logger.LogWarning("Job {JobId} not found", jobId);
+            return;
+        }
+
+        if (job.IsFinished)
+        {
+            // Cancelled while still queued
+            logger.LogInformation("Job {JobId} is {Status}, skipping", jobId, job.Status);
             return;
         }
 
@@ -34,14 +45,24 @@ public sealed class DownloadJobProcessor(
         // Live progress goes to SSE only. Persisting it would mean a DB write per yt-dlp line on a
         // DbContext that is not thread-safe, racing the final Complete() save. The notifier writes to a
         // DropOldest bounded channel, so the task completes synchronously and order is preserved.
-        var progress = new ThrottledProgress(pct =>
+        var progress = new ThrottledProgress(p =>
         {
-            _ = notifier.NotifyProgressAsync(jobId, pct, ct)
+            _ = notifier.NotifyProgressAsync(jobId, p, ct)
                 .ContinueWith(t => logger.LogWarning(t.Exception, "Progress SSE notify failed for {JobId}", jobId),
                     TaskContinuationOptions.OnlyOnFaulted);
         }, ProgressInterval);
 
-        var result = await downloadService.DownloadAsync(jobId, job.Url, job.Format, job.Quality, progress, ct);
+        var result = await downloadService.DownloadAsync(
+            jobId, job.Url, job.Format, job.Quality, progress, registration.Token);
+
+        if (registration.CancelledByUser(ct))
+        {
+            CleanTempFiles(jobId);
+            job.Cancel();
+            await repository.UpdateAsync(job, ct);
+            await notifier.NotifyCancelledAsync(jobId, ct);
+            return;
+        }
 
         if (result.IsFailure)
         {
@@ -65,7 +86,7 @@ public sealed class DownloadJobProcessor(
         {
             logger.LogError(ex, "Failed to save downloaded file for job {JobId}", jobId);
             CleanTempFiles(jobId);
-            job.Fail("Failed to save the downloaded file.");
+            job.Fail("Something went wrong while saving your file. Please try again.");
             await repository.UpdateAsync(job, ct);
             await notifier.NotifyFailedAsync(jobId, job.ErrorMessage!, ct);
             return;
@@ -87,20 +108,22 @@ public sealed class DownloadJobProcessor(
         job.Complete(savedPath, title, thumbnailUrl, duration, fileSizeBytes);
         await repository.UpdateAsync(job, ct);
 
+        var retention = storageOptions.Value.FileRetention;
         var downloadUrl = storage.GetDownloadUrl(savedPath, title);
         var payload = new DownloadCompletedPayload(
             DownloadUrl: downloadUrl,
             Title: title,
             ThumbnailUrl: thumbnailUrl,
             Duration: duration,
-            Size: FormatFileSize(fileSizeBytes),
-            ExpiresAt: GetExpiresAt());
+            Size: FileSizeFormatter.Format(fileSizeBytes),
+            ExpiresAt: GetExpiresAt(),
+            ExpiresAtUtc: job.CompletedAt!.Value + retention);
 
         await notifier.NotifyCompletedAsync(jobId, payload, ct);
 
         BackgroundJob.Schedule<FileCleanupJob>(
             j => j.DeleteAsync(savedPath, CancellationToken.None),
-            storageOptions.Value.FileRetention);
+            retention);
     }
 
     private void CleanTempFiles(Guid jobId)
@@ -140,12 +163,6 @@ public sealed class DownloadJobProcessor(
         return h == 1 ? "in 1 hour" : $"in {h} hours";
     }
 
-    private static string FormatFileSize(long bytes)
-    {
-        if (bytes >= 1_073_741_824) return $"{bytes / 1_073_741_824.0:F1} GB";
-        if (bytes >= 1_048_576) return $"{bytes / 1_048_576.0:F1} MB";
-        return $"{bytes / 1024.0:F1} KB";
-    }
 
     private static string FormatDuration(TimeSpan d) =>
         d.TotalHours >= 1

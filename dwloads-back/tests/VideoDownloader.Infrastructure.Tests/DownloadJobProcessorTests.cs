@@ -22,6 +22,7 @@ public sealed class DownloadJobProcessorTests
     private readonly IVideoDownloadService _downloadService = Substitute.For<IVideoDownloadService>();
     private readonly IStorageService _storage = Substitute.For<IStorageService>();
     private readonly IProgressNotifier _notifier = Substitute.For<IProgressNotifier>();
+    private readonly JobCancellationRegistry _cancellations = new();
     private readonly DownloadJobProcessor _processor;
 
     public DownloadJobProcessorTests()
@@ -32,9 +33,16 @@ public sealed class DownloadJobProcessorTests
             _downloadService,
             _storage,
             _notifier,
+            _cancellations,
             Options.Create(new StorageOptions()),
             NullLogger<DownloadJobProcessor>.Instance);
     }
+
+    private void DownloadReturns(Func<IProgress<DownloadProgress>, CancellationToken, Result<string>> behaviour) =>
+        _downloadService.DownloadAsync(
+                Arg.Any<Guid>(), Arg.Any<VideoUrl>(), Arg.Any<DownloadFormat>(), Arg.Any<string>(),
+                Arg.Any<IProgress<DownloadProgress>>(), Arg.Any<CancellationToken>())
+            .Returns(ci => behaviour(ci.Arg<IProgress<DownloadProgress>>(), ci.Arg<CancellationToken>()));
 
     [Fact]
     public async Task ProcessAsync_WithNonExistingJob_ReturnsEarlyWithoutCallingDownloadService()
@@ -44,9 +52,22 @@ public sealed class DownloadJobProcessorTests
 
         await _processor.ProcessAsync(Guid.NewGuid(), CancellationToken.None);
 
-        await _downloadService.DidNotReceive()
-            .DownloadAsync(Arg.Any<Guid>(), Arg.Any<VideoUrl>(), Arg.Any<DownloadFormat>(), Arg.Any<string>(),
-                Arg.Any<IProgress<int>>(), Arg.Any<CancellationToken>());
+        await _downloadService.DidNotReceiveWithAnyArgs()
+            .DownloadAsync(default, default!, default, default!, default!, default);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WhenJobWasCancelledWhileQueued_SkipsDownload()
+    {
+        var job = MakeJob();
+        job.Cancel();
+        _repository.GetByIdAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
+
+        await _processor.ProcessAsync(job.Id, CancellationToken.None);
+
+        await _downloadService.DidNotReceiveWithAnyArgs()
+            .DownloadAsync(default, default!, default, default!, default!, default);
+        await _repository.DidNotReceiveWithAnyArgs().UpdateAsync(default!, default);
     }
 
     [Fact]
@@ -55,10 +76,7 @@ public sealed class DownloadJobProcessorTests
         var job = MakeJob();
         var error = new Error("YtDlp.DownloadFailed", "Connection reset");
         _repository.GetByIdAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
-        _downloadService.DownloadAsync(
-                Arg.Any<Guid>(), Arg.Any<VideoUrl>(), Arg.Any<DownloadFormat>(), Arg.Any<string>(),
-                Arg.Any<IProgress<int>>(), Arg.Any<CancellationToken>())
-            .Returns(Result<string>.Failure(error));
+        DownloadReturns((_, _) => Result<string>.Failure(error));
 
         await _processor.ProcessAsync(job.Id, CancellationToken.None);
 
@@ -69,6 +87,27 @@ public sealed class DownloadJobProcessorTests
         await _repository.Received(2).UpdateAsync(job, Arg.Any<CancellationToken>());
         await _notifier.Received(1).NotifyFailedAsync(job.Id, error.Message, Arg.Any<CancellationToken>());
         await _storage.DidNotReceive().ImportAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WhenUserCancelsMidDownload_MarksCancelledAndNotifies()
+    {
+        var job = MakeJob();
+        _repository.GetByIdAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
+        DownloadReturns((_, token) =>
+        {
+            // The user hits cancel while yt-dlp is running
+            _cancellations.TryCancel(job.Id).Should().BeTrue();
+            token.IsCancellationRequested.Should().BeTrue();
+            return Result<string>.Failure(new Error("YtDlp.Cancelled", "Download was cancelled."));
+        });
+
+        await _processor.ProcessAsync(job.Id, CancellationToken.None);
+
+        job.Status.Should().Be(DownloadStatus.Cancelled);
+        await _notifier.Received(1).NotifyCancelledAsync(job.Id, Arg.Any<CancellationToken>());
+        await _notifier.DidNotReceiveWithAnyArgs().NotifyFailedAsync(default, default!, default);
+        _cancellations.TryCancel(job.Id).Should().BeFalse("the registration is removed once the job ends");
     }
 
     [Fact]
@@ -84,10 +123,7 @@ public sealed class DownloadJobProcessorTests
             await File.WriteAllBytesAsync(tempFile, [1, 2, 3]);
 
             _repository.GetByIdAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
-            _downloadService.DownloadAsync(
-                    Arg.Any<Guid>(), Arg.Any<VideoUrl>(), Arg.Any<DownloadFormat>(), Arg.Any<string>(),
-                    Arg.Any<IProgress<int>>(), Arg.Any<CancellationToken>())
-                .Returns(Result<string>.Success(tempFile));
+            DownloadReturns((_, _) => Result<string>.Success(tempFile));
             _storage.ImportAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
                 .Returns(storedPath);
             _storage.GetDownloadUrl(storedPath, Arg.Any<string>()).Returns(downloadUrl);
@@ -97,7 +133,11 @@ public sealed class DownloadJobProcessorTests
             job.Status.Should().Be(DownloadStatus.Completed);
             job.OutputFilePath.Should().Be(storedPath);
 
-            await _notifier.Received(1).NotifyCompletedAsync(job.Id, Arg.Is<DownloadCompletedPayload>(p => p.DownloadUrl == downloadUrl), Arg.Any<CancellationToken>());
+            await _notifier.Received(1).NotifyCompletedAsync(job.Id,
+                Arg.Is<DownloadCompletedPayload>(p =>
+                    p.DownloadUrl == downloadUrl
+                    && p.ExpiresAtUtc == job.CompletedAt!.Value + new StorageOptions().FileRetention),
+                Arg.Any<CancellationToken>());
         }
         finally
         {
@@ -110,22 +150,21 @@ public sealed class DownloadJobProcessorTests
     {
         var job = MakeJob();
         _repository.GetByIdAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
-        _downloadService.DownloadAsync(
-                Arg.Any<Guid>(), Arg.Any<VideoUrl>(), Arg.Any<DownloadFormat>(), Arg.Any<string>(),
-                Arg.Any<IProgress<int>>(), Arg.Any<CancellationToken>())
-            .Returns(ci =>
-            {
-                var progress = ci.Arg<IProgress<int>>();
-                for (var pct = 0; pct <= 99; pct++) progress.Report(pct);
-                return Result<string>.Failure(new Error("YtDlp.DownloadFailed", "boom"));
-            });
+        DownloadReturns((progress, _) =>
+        {
+            for (var pct = 0; pct <= 99; pct++)
+                progress.Report(new DownloadProgress(DownloadStep.Downloading, pct));
+            progress.Report(new DownloadProgress(DownloadStep.Converting, 99));
+            return Result<string>.Failure(new Error("YtDlp.DownloadFailed", "boom"));
+        });
 
         await _processor.ProcessAsync(job.Id, CancellationToken.None);
 
         // Regression: progress used to fire a DB write per yt-dlp line on a shared DbContext,
         // throwing "A second operation was started on this context". Only start + final state now.
         await _repository.Received(2).UpdateAsync(job, Arg.Any<CancellationToken>());
-        await _notifier.Received().NotifyProgressAsync(job.Id, 99, Arg.Any<CancellationToken>());
+        await _notifier.Received().NotifyProgressAsync(
+            job.Id, new DownloadProgress(DownloadStep.Converting, 99), Arg.Any<CancellationToken>());
     }
 
     private static DownloadJob MakeJob()

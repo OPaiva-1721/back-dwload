@@ -54,6 +54,15 @@ public sealed class DownloadJob
         FileSizeBytes = fileSizeBytes;
     }
 
+    public bool IsFinished => Status is DownloadStatus.Completed or DownloadStatus.Failed or DownloadStatus.Cancelled;
+
+    public void Cancel()
+    {
+        if (IsFinished) throw new InvalidOperationException($"Cannot cancel a job in state {Status}.");
+        Status = DownloadStatus.Cancelled;
+        CompletedAt = DateTimeOffset.UtcNow;
+    }
+
     public void Fail(string reason)
     {
         ErrorMessage = reason;

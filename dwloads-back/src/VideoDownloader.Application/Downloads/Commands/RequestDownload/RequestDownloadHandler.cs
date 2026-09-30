@@ -25,6 +25,10 @@ public sealed class RequestDownloadHandler(
             return Result<RequestDownloadResponse>.Failure(
                 new Error("Format.Invalid", $"Format '{request.Format}' is not supported. Use 'mp4' or 'mp3'."));
 
+        if (!IsValidQuality(format, request.Quality))
+            return Result<RequestDownloadResponse>.Failure(
+                new Error("Quality.Invalid", "That quality isn't available. Pick one of the listed options."));
+
         var job = DownloadJob.Create(urlResult.Value!, format, request.Quality, request.Title, request.ThumbnailUrl, request.Duration);
 
         await repository.AddAsync(job, ct);
@@ -33,4 +37,14 @@ public sealed class RequestDownloadHandler(
         return Result<RequestDownloadResponse>.Success(
             new RequestDownloadResponse(job.Id, job.Status.ToString()));
     }
+
+    private static readonly string[] AudioQualities = ["320kbps", "256kbps", "192kbps", "128kbps"];
+
+    // Video: any real stream height ("360p", "1440p"...), since clients offer what the video actually has
+    private static bool IsValidQuality(DownloadFormat format, string quality) =>
+        format == DownloadFormat.Mp3
+            ? AudioQualities.Contains(quality)
+            : quality.EndsWith('p')
+              && int.TryParse(quality.AsSpan(0, quality.Length - 1), out var height)
+              && height is >= 144 and <= 4320;
 }

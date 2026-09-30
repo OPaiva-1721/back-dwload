@@ -8,7 +8,8 @@ public sealed record DownloadCompletedPayload(
     string ThumbnailUrl,
     string Duration,
     string Size,
-    string ExpiresAt);
+    string ExpiresAt,
+    DateTimeOffset ExpiresAtUtc);
 
 public sealed record VideoMetadataResponse(
     string Title,
@@ -16,7 +17,18 @@ public sealed record VideoMetadataResponse(
     TimeSpan Duration,
     IReadOnlyList<FormatInfo> AvailableFormats);
 
-public sealed record FormatInfo(string Id, string Extension, string Quality, long? FileSizeBytes, int? Height);
+/// <param name="FileSizeBytes">Exact size, or yt-dlp's estimate when the exact one is unknown.</param>
+/// <param name="HasVideo">False for audio-only streams (and storyboards are excluded entirely).</param>
+/// <param name="AudioBitrateKbps">Source audio bitrate, so clients don't offer pointless upsampling.</param>
+public sealed record FormatInfo(
+    string Id,
+    string Extension,
+    string Quality,
+    long? FileSizeBytes,
+    int? Height,
+    bool HasVideo = false,
+    bool HasAudio = false,
+    double? AudioBitrateKbps = null);
 
 public sealed record DownloadJobStatusResponse(
     Guid JobId,
@@ -27,4 +39,10 @@ public sealed record DownloadJobStatusResponse(
     string Title = "",
     string ThumbnailUrl = "",
     string Duration = "",
-    long FileSizeBytes = 0);
+    long FileSizeBytes = 0,
+    DateTimeOffset? CompletedAt = null);
+
+public enum DownloadStep { Downloading, Converting }
+
+/// <summary>Overall job progress: which phase yt-dlp is in and how far along (0-99).</summary>
+public sealed record DownloadProgress(DownloadStep Step, int Percent);

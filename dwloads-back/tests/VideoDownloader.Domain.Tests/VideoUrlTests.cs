@@ -33,6 +33,8 @@ public sealed class VideoUrlTests
     [Theory]
     [InlineData("https://example.com/123456")]
     [InlineData("https://facebook.com/video/abc")]
+    [InlineData("https://open.spotify.com/track/abc")]
+    [InlineData("https://notyoutube.com/watch?v=abc")]
     public void Create_WithUnsupportedPlatform_ReturnsUnsupportedPlatformError(string raw)
     {
         var result = VideoUrl.Create(raw);
@@ -49,6 +51,10 @@ public sealed class VideoUrlTests
     [InlineData("https://www.tiktok.com/@user/video/123", Platform.TikTok)]
     [InlineData("https://twitter.com/user/status/123", Platform.Twitter)]
     [InlineData("https://x.com/user/status/123", Platform.Twitter)]
+    [InlineData("https://m.youtube.com/watch?v=dQw4w9WgXcQ", Platform.YouTube)]
+    [InlineData("https://music.youtube.com/watch?v=dQw4w9WgXcQ", Platform.YouTube)]
+    [InlineData("https://vm.tiktok.com/ZMabc123/", Platform.TikTok)]
+    [InlineData("https://mobile.twitter.com/user/status/123", Platform.Twitter)]
     public void Create_WithSupportedPlatformUrl_ReturnsSuccessWithCorrectPlatform(string raw, Platform expected)
     {
         var result = VideoUrl.Create(raw);

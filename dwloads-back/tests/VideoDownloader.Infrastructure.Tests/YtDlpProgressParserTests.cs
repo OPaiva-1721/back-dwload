@@ -1,4 +1,5 @@
 using FluentAssertions;
+using VideoDownloader.Application.Common.DTOs;
 using VideoDownloader.Infrastructure.YtDlp;
 
 namespace VideoDownloader.Infrastructure.Tests;
@@ -11,8 +12,9 @@ public sealed class YtDlpProgressParserTests
         var parser = new YtDlpProgressParser(expectedStreams: 1);
         parser.Parse("[download] Destination: /work/a.webm");
 
-        parser.Parse("[download]  42.5% of 3.00MiB at 1.00MiB/s ETA 00:02").Should().Be(42);
-        parser.Parse("[download] 100% of 3.00MiB in 00:00:03").Should().Be(99);
+        parser.Parse("[download]  42.5% of 3.00MiB at 1.00MiB/s ETA 00:02")
+            .Should().Be(new DownloadProgress(DownloadStep.Downloading, 42));
+        parser.Parse("[download] 100% of 3.00MiB in 00:00:03")!.Percent.Should().Be(99);
     }
 
     [Fact]
@@ -29,9 +31,24 @@ public sealed class YtDlpProgressParserTests
         ];
 
         foreach (var line in lines)
-            if (parser.Parse(line) is { } pct) reported.Add(pct);
+            if (parser.Parse(line) is { } p) reported.Add(p.Percent);
 
         reported.Should().Equal(25, 50, 75, 99);
+    }
+
+    [Theory]
+    [InlineData("[Merger] Merging formats into \"/work/a.mp4\"")]
+    [InlineData("[ExtractAudio] Destination: /work/a.mp3")]
+    [InlineData("[FixupM4a] Correcting container of \"/work/a.m4a\"")]
+    public void Parse_PostProcessorLine_SwitchesToConvertingOnce(string line)
+    {
+        var parser = new YtDlpProgressParser(expectedStreams: 1);
+        parser.Parse("[download] Destination: /work/a.webm");
+        parser.Parse("[download] 100% of 1MiB");
+
+        parser.Parse(line).Should().Be(new DownloadProgress(DownloadStep.Converting, 99));
+        parser.Parse(line).Should().BeNull();
+        parser.Parse("[download]  50.0% of 1MiB").Should().BeNull("download progress after converting is stale");
     }
 
     [Fact]
@@ -40,7 +57,7 @@ public sealed class YtDlpProgressParserTests
         var parser = new YtDlpProgressParser(expectedStreams: 1);
 
         parser.Parse("[youtube] abc: Downloading webpage").Should().BeNull();
-        parser.Parse("[download]  30.0% of 1MiB").Should().Be(30);
+        parser.Parse("[download]  30.0% of 1MiB")!.Percent.Should().Be(30);
         parser.Parse("[download]  30.0% of 1MiB").Should().BeNull();
         parser.Parse("[download]  10.0% of 1MiB").Should().BeNull();
     }

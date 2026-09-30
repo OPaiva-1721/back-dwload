@@ -9,13 +9,15 @@ public static class DomainErrors
 {
     public static class VideoUrl
     {
-        public static readonly Error Empty = new("VideoUrl.Empty", "URL cannot be empty.");
-        public static readonly Error Invalid = new("VideoUrl.Invalid", "URL format is invalid.");
-        public static readonly Error UnsupportedPlatform = new("VideoUrl.UnsupportedPlatform", "Platform not supported.");
+        public static readonly Error Empty = new("VideoUrl.Empty", "Paste a link to get started.");
+        public static readonly Error Invalid = new("VideoUrl.Invalid", "That doesn't look like a valid link.");
+        public static readonly Error UnsupportedPlatform = new("VideoUrl.UnsupportedPlatform",
+            "This site isn't supported yet. Try YouTube, TikTok, Instagram, X, Vimeo, SoundCloud, Twitch or Dailymotion.");
     }
 
     public static class DownloadJob
     {
         public static readonly Error NotFound = new("DownloadJob.NotFound", "Download job not found.");
+        public static readonly Error NotCancellable = new("DownloadJob.NotCancellable", "This download has already finished.");
     }
 }

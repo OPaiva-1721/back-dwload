@@ -45,21 +45,15 @@ public sealed class YtDlpVideoService(
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
-            var formats = root.GetProperty("formats").EnumerateArray()
-                .Select(f => new FormatInfo(
-                    f.GetProperty("format_id").GetString()!,
-                    f.GetProperty("ext").GetString()!,
-                    f.TryGetProperty("quality", out var q) ? q.ToString() : "unknown",
-                    f.TryGetProperty("filesize", out var fs) && fs.ValueKind == JsonValueKind.Number
-                        ? fs.GetInt64() : null,
-                    f.TryGetProperty("height", out var h) && h.ValueKind == JsonValueKind.Number
-                        ? h.GetInt32() : null))
-                .ToList();
+            var formats = root.TryGetProperty("formats", out var fmts)
+                ? fmts.EnumerateArray().Where(f => !IsStoryboard(f)).Select(ToFormatInfo).ToList()
+                : [];
 
             var response = new VideoMetadataResponse(
                 root.GetProperty("title").GetString()!,
                 root.TryGetProperty("thumbnail", out var thumb) ? thumb.GetString()! : string.Empty,
-                TimeSpan.FromSeconds(root.GetProperty("duration").GetDouble()),
+                TimeSpan.FromSeconds(
+                    root.TryGetProperty("duration", out var dur) && dur.ValueKind == JsonValueKind.Number ? dur.GetDouble() : 0),
                 formats);
 
             await CacheMetadataAsync(url, response, json, ct);
@@ -67,18 +61,15 @@ public sealed class YtDlpVideoService(
         }
         catch (Exception ex)
         {
+            // Raw yt-dlp output stays in the logs; users get a message they can act on
             logger.LogError(ex, "Failed to fetch metadata for {Url}", url.Value);
-            if (ClassifyFailure(ex.Message) is { } known)
-                return Result<VideoMetadataResponse>.Failure(known);
-            var detail = ex.Message.Length > 300 ? ex.Message[..300] : ex.Message;
-            return Result<VideoMetadataResponse>.Failure(
-                new Error("YtDlp.MetadataFailed", $"Could not retrieve video metadata. {detail}"));
+            return Result<VideoMetadataResponse>.Failure(ClassifyFailure(ex.Message) ?? MetadataFailed);
         }
     }
 
     public async Task<Result<string>> DownloadAsync(
         Guid jobId, VideoUrl url, DownloadFormat format, string quality,
-        IProgress<int> progress, CancellationToken ct)
+        IProgress<DownloadProgress> progress, CancellationToken ct)
     {
         await limiter.WaitAsync(ct);
         try
@@ -124,7 +115,7 @@ public sealed class YtDlpVideoService(
                     .FirstOrDefault(f => !f.EndsWith(".info.json", StringComparison.OrdinalIgnoreCase));
 
                 return finalPath is null
-                    ? Result<string>.Failure(new Error("YtDlp.OutputNotFound", "Download output file not found."))
+                    ? Result<string>.Failure(DownloadFailed)
                     : Result<string>.Success(finalPath);
             }
             catch (OperationCanceledException)
@@ -134,8 +125,7 @@ public sealed class YtDlpVideoService(
             catch (Exception ex)
             {
                 logger.LogError(ex, "Download failed for job {JobId}", jobId);
-                return Result<string>.Failure(
-                    ClassifyFailure(ex.Message) ?? new Error("YtDlp.DownloadFailed", ex.Message));
+                return Result<string>.Failure(ClassifyFailure(ex.Message) ?? DownloadFailed);
             }
             finally
             {
@@ -148,19 +138,64 @@ public sealed class YtDlpVideoService(
         }
     }
 
-    /// <summary>Maps well-known yt-dlp failures to actionable errors; null when unrecognised.</summary>
+    private static readonly Error MetadataFailed = new("YtDlp.MetadataFailed",
+        "We couldn't read this video. Check the link and try again.");
+    private static readonly Error DownloadFailed = new("YtDlp.DownloadFailed",
+        "The download failed. Please try again in a moment.");
+
+    // Order matters: the age check must win over the generic "Sign in to confirm" bot check
+    private static readonly (string[] Needles, Error Error)[] KnownFailures =
+    [
+        (["confirm your age", "age-restricted", "inappropriate for some users"],
+            new("YtDlp.AgeRestricted", "This video is age-restricted and can't be downloaded.")),
+        (["Private video", "This video is private"],
+            new("YtDlp.Private", "This video is private.")),
+        (["not available in your country", "geo restriction", "geo-restricted", "blocked it in your country"],
+            new("YtDlp.GeoBlocked", "This video isn't available in our region.")),
+        (["live event will begin", "is live", "Premieres in", "is upcoming"],
+            new("YtDlp.Live", "Live streams and premieres can be downloaded once they've ended.")),
+        (["Video unavailable", "This video is unavailable", "has been removed", "does not exist", "HTTP Error 404"],
+            new("YtDlp.Unavailable", "This video is unavailable. It may have been removed, or the link is wrong.")),
+        (["Unsupported URL", "No video formats found", "no video in this post"],
+            new("YtDlp.NoMedia", "We couldn't find a video at this link.")),
+        (["Sign in to confirm", "cookies are no longer valid", "HTTP Error 403", "HTTP Error 429", "rate-limit"],
+            new("YtDlp.Blocked", "The platform is temporarily blocking downloads. Please try again in a few minutes.")),
+        (["Requested format is not available"],
+            new("YtDlp.FormatUnavailable", "This quality isn't available for this video. Try a lower one.")),
+    ];
+
+    /// <summary>Maps well-known yt-dlp failures to user-facing errors; null when unrecognised.</summary>
     internal static Error? ClassifyFailure(string message)
     {
-        if (message.Contains("Sign in to confirm", StringComparison.OrdinalIgnoreCase)
-            || message.Contains("cookies are no longer valid", StringComparison.OrdinalIgnoreCase))
-            return new Error("YtDlp.AuthRequired",
-                "YouTube session expired or was flagged as a bot. Regenerate cookies.txt (tools/yt_cookies: login, then export).");
-
-        if (message.Contains("Requested format is not available", StringComparison.OrdinalIgnoreCase))
-            return new Error("YtDlp.FormatUnavailable",
-                "Requested format is not available. Check that deno/node and ffmpeg are installed and yt-dlp is up to date.");
-
+        foreach (var (needles, error) in KnownFailures)
+            if (needles.Any(n => message.Contains(n, StringComparison.OrdinalIgnoreCase)))
+                return error;
         return null;
+    }
+
+    private static bool IsStoryboard(JsonElement f) =>
+        (f.TryGetProperty("format_note", out var note) && note.ValueKind == JsonValueKind.String && note.GetString() == "storyboard")
+        || (f.TryGetProperty("ext", out var ext) && ext.ValueKind == JsonValueKind.String && ext.GetString() == "mhtml");
+
+    internal static FormatInfo ToFormatInfo(JsonElement f)
+    {
+        static long? Long(JsonElement e, string name) =>
+            e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? (long)v.GetDouble() : null;
+        static double? Double(JsonElement e, string name) =>
+            e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : null;
+        // yt-dlp uses "none" for an absent stream; a missing key means unknown
+        static bool Has(JsonElement e, string codec) =>
+            e.TryGetProperty(codec, out var v) && v.ValueKind == JsonValueKind.String && v.GetString() != "none";
+
+        return new FormatInfo(
+            f.GetProperty("format_id").GetString()!,
+            f.TryGetProperty("ext", out var ext) ? ext.GetString() ?? "" : "",
+            f.TryGetProperty("quality", out var q) ? q.ToString() : "unknown",
+            Long(f, "filesize") ?? Long(f, "filesize_approx"),
+            (int?)Long(f, "height"),
+            HasVideo: Has(f, "vcodec"),
+            HasAudio: Has(f, "acodec"),
+            AudioBitrateKbps: Has(f, "acodec") ? Double(f, "abr") : null);
     }
 
     private string[] BaseArgs() =>
@@ -196,18 +231,14 @@ public sealed class YtDlpVideoService(
         }
     }
 
-    private static string[] BuildVideoArgs(string quality, string outputTemplate)
-    {
-        var formatSelector = quality switch
-        {
-            "2160p" => "bestvideo[height<=2160][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=2160]+bestaudio/best",
-            "1080p" => "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best",
-            "720p"  => "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best",
-            "480p"  => "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=480]+bestaudio/best",
-            _       => "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4",
-        };
-        return ["-f", formatSelector, "--merge-output-format", "mp4", "-o", outputTemplate];
-    }
+    /// <summary>Best stream at or below the requested height ("720p"), preferring mp4/m4a.</summary>
+    internal static string VideoFormatSelector(string quality) =>
+        int.TryParse(quality.TrimEnd('p'), out var height) && height > 0
+            ? $"bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<={height}]+bestaudio/best[height<={height}]/best"
+            : "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best";
+
+    private static string[] BuildVideoArgs(string quality, string outputTemplate) =>
+        ["-f", VideoFormatSelector(quality), "--merge-output-format", "mp4", "-o", outputTemplate];
 
     private static string[] BuildAudioArgs(string quality, string outputTemplate)
     {
@@ -252,7 +283,7 @@ public sealed class YtDlpVideoService(
     }
 
     private async Task RunWithProgressAsync(
-        string[] args, YtDlpProgressParser parser, IProgress<int> progress, CancellationToken ct)
+        string[] args, YtDlpProgressParser parser, IProgress<DownloadProgress> progress, CancellationToken ct)
     {
         using var process = CreateProcess(args);
         var stderrBuilder = new StringBuilder();

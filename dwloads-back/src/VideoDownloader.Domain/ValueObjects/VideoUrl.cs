@@ -19,7 +19,6 @@ public sealed record VideoUrl
         ["vimeo.com"]      = Platform.Vimeo,
         ["twitch.tv"]      = Platform.Twitch,
         ["soundcloud.com"] = Platform.SoundCloud,
-        ["spotify.com"]    = Platform.Spotify,
         ["dailymotion.com"]= Platform.Dailymotion,
     };
 
@@ -37,10 +36,14 @@ public sealed record VideoUrl
         if (!Uri.TryCreate(raw, UriKind.Absolute, out var uri))
             return Result<VideoUrl>.Failure(DomainErrors.VideoUrl.Invalid);
 
-        var host = uri.Host.Replace("www.", "");
-        if (!PlatformMap.TryGetValue(host, out var platform))
-            return Result<VideoUrl>.Failure(DomainErrors.VideoUrl.UnsupportedPlatform);
+        // Match the registrable domain so mobile/app subdomains work (m.youtube.com, music.youtube.com, vm.tiktok.com)
+        var host = uri.Host.ToLowerInvariant();
+        foreach (var (domain, platform) in PlatformMap)
+        {
+            if (host == domain || host.EndsWith("." + domain, StringComparison.Ordinal))
+                return Result<VideoUrl>.Success(new VideoUrl(raw, platform));
+        }
 
-        return Result<VideoUrl>.Success(new VideoUrl(raw, platform));
+        return Result<VideoUrl>.Failure(DomainErrors.VideoUrl.UnsupportedPlatform);
     }
 }
