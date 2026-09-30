@@ -17,6 +17,8 @@ public sealed class DownloadJobProcessor(
     IOptions<StorageOptions> storageOptions,
     ILogger<DownloadJobProcessor> logger)
 {
+    private static readonly TimeSpan ProgressInterval = TimeSpan.FromMilliseconds(300);
+
     public async Task ProcessAsync(Guid jobId, CancellationToken ct)
     {
         var job = await repository.GetByIdAsync(jobId, ct);
@@ -26,19 +28,18 @@ public sealed class DownloadJobProcessor(
             return;
         }
 
-        // Progress<T> takes Action<T> — async lambda here would be async void (exceptions swallowed).
-        // Both underlying calls are effectively synchronous (in-memory repo + bounded channel TryWrite),
-        // so fire-and-forget with logged continuation is correct and safe.
-        var progress = new Progress<int>(pct =>
+        job.UpdateProgress(0);
+        await repository.UpdateAsync(job, ct);
+
+        // Live progress goes to SSE only. Persisting it would mean a DB write per yt-dlp line on a
+        // DbContext that is not thread-safe, racing the final Complete() save. The notifier writes to a
+        // DropOldest bounded channel, so the task completes synchronously and order is preserved.
+        var progress = new ThrottledProgress(pct =>
         {
-            job.UpdateProgress(pct);
-            _ = repository.UpdateAsync(job, ct)
-                .ContinueWith(t => logger.LogWarning(t.Exception, "Progress repo update failed for {JobId}", jobId),
-                    TaskContinuationOptions.OnlyOnFaulted);
             _ = notifier.NotifyProgressAsync(jobId, pct, ct)
                 .ContinueWith(t => logger.LogWarning(t.Exception, "Progress SSE notify failed for {JobId}", jobId),
                     TaskContinuationOptions.OnlyOnFaulted);
-        });
+        }, ProgressInterval);
 
         var result = await downloadService.DownloadAsync(jobId, job.Url, job.Format, job.Quality, progress, ct);
 
@@ -58,8 +59,7 @@ public sealed class DownloadJobProcessor(
         try
         {
             fileSizeBytes = new FileInfo(tempPath).Length;
-            await using var fs = File.OpenRead(tempPath);
-            savedPath = await storage.SaveAsync(fs, Path.GetFileName(tempPath), ct);
+            savedPath = await storage.ImportAsync(tempPath, Path.GetFileName(tempPath), ct);
         }
         catch (Exception ex)
         {
@@ -72,7 +72,7 @@ public sealed class DownloadJobProcessor(
         }
         finally
         {
-            // Always remove the original temp file regardless of success or failure
+            // After a successful move this is a no-op; on failure it removes the leftover
             if (File.Exists(tempPath))
                 File.Delete(tempPath);
         }
@@ -80,6 +80,9 @@ public sealed class DownloadJobProcessor(
         var (title, thumbnailUrl, duration) = !string.IsNullOrWhiteSpace(job.Title)
             ? (job.Title, job.ThumbnailUrl, job.Duration)
             : ReadAndDeleteInfoJson(jobId);
+
+        // yt-dlp always writes {jobId}.info.json; when the client supplied the title it was never read
+        CleanTempFiles(jobId);
 
         job.Complete(savedPath, title, thumbnailUrl, duration, fileSizeBytes);
         await repository.UpdateAsync(job, ct);
@@ -102,16 +105,20 @@ public sealed class DownloadJobProcessor(
 
     private void CleanTempFiles(Guid jobId)
     {
-        foreach (var file in Directory.GetFiles(Path.GetTempPath(), $"{jobId}*"))
+        var workPath = storageOptions.Value.WorkPath;
+        if (!Directory.Exists(workPath)) return;
+        foreach (var file in Directory.GetFiles(workPath, $"{jobId}*"))
         {
             try { File.Delete(file); }
             catch (Exception ex) { logger.LogWarning(ex, "Failed to clean temp file {File}", file); }
         }
     }
 
-    private static (string title, string thumbnailUrl, string duration) ReadAndDeleteInfoJson(Guid jobId)
+    private (string title, string thumbnailUrl, string duration) ReadAndDeleteInfoJson(Guid jobId)
     {
-        var infoFile = Directory.GetFiles(Path.GetTempPath(), $"{jobId}*.info.json").FirstOrDefault();
+        var workPath = storageOptions.Value.WorkPath;
+        if (!Directory.Exists(workPath)) return (string.Empty, string.Empty, string.Empty);
+        var infoFile = Directory.GetFiles(workPath, $"{jobId}*.info.json").FirstOrDefault();
         if (infoFile is null) return (string.Empty, string.Empty, string.Empty);
         try
         {

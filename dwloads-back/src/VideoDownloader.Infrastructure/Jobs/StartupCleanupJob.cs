@@ -21,7 +21,11 @@ public sealed class StartupCleanupJob(
         var cutoff = DateTimeOffset.UtcNow - opts.FileRetention;
         var deleted = 0;
 
-        foreach (var file in Directory.GetFiles(opts.BasePath))
+        // Work dir holds partial downloads and cached info JSONs left behind by a crash/restart
+        var files = Directory.GetFiles(opts.BasePath)
+            .Concat(Directory.Exists(opts.WorkPath) ? Directory.GetFiles(opts.WorkPath) : []);
+
+        foreach (var file in files)
         {
             try
             {

@@ -23,6 +23,7 @@ public static class DependencyInjection
         services.Configure<YtDlpOptions>(config.GetSection("YtDlp"));
         services.Configure<StorageOptions>(config.GetSection("Storage"));
         services.AddSingleton(new YtDlpConcurrencyLimiter(maxConcurrent: 2));
+        services.AddMemoryCache();
 
         var connectionString = config.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured.");

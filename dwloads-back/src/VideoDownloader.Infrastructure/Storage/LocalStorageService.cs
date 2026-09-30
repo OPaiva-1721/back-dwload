@@ -8,13 +8,13 @@ public sealed class LocalStorageService(IOptions<StorageOptions> options) : ISto
     private readonly string _basePath = options.Value.BasePath;
     private readonly string _baseUrl = options.Value.BaseUrl;
 
-    public async Task<string> SaveAsync(Stream content, string fileName, CancellationToken ct)
+    public Task<string> ImportAsync(string sourcePath, string fileName, CancellationToken ct)
     {
         Directory.CreateDirectory(_basePath);
         var dest = Path.Combine(_basePath, fileName);
-        await using var fs = File.Create(dest);
-        await content.CopyToAsync(fs, ct);
-        return dest;
+        // Same filesystem (see StorageOptions.WorkPath) → rename; otherwise .NET falls back to copy+delete.
+        File.Move(sourcePath, dest, overwrite: true);
+        return Task.FromResult(dest);
     }
 
     public Task DeleteAsync(string filePath, CancellationToken ct)

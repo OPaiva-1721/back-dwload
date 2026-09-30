@@ -60,14 +60,19 @@ public static class DownloadEndpoints
 
         app.MapGet("/files/{fileName}", (string fileName, [FromQuery] string? title, IOptions<StorageOptions> storageOptions) =>
         {
-            var filePath = Path.GetFullPath(Path.Combine(storageOptions.Value.BasePath, fileName));
-            if (!File.Exists(filePath)) return Results.NotFound();
+            var basePath = Path.GetFullPath(storageOptions.Value.BasePath);
+            var filePath = Path.GetFullPath(Path.Combine(basePath, fileName));
+            // Only files directly in storage — never the .work dir or anything outside BasePath
+            if (!string.Equals(Path.GetDirectoryName(filePath), basePath.TrimEnd(Path.DirectorySeparatorChar), StringComparison.Ordinal)
+                || !File.Exists(filePath))
+                return Results.NotFound();
             var ext = Path.GetExtension(fileName).TrimStart('.').ToLowerInvariant();
             var contentType = ext == "mp3" ? "audio/mpeg" : "video/mp4";
             var downloadName = !string.IsNullOrWhiteSpace(title)
                 ? $"{SanitizeFileName(title)}.{ext}"
                 : fileName;
-            return Results.File(filePath, contentType, downloadName);
+            // Range support: resumable downloads and seeking in the browser player
+            return Results.File(filePath, contentType, downloadName, enableRangeProcessing: true);
         })
         .WithName("DownloadFile")
         .WithSummary("Download processed file")
